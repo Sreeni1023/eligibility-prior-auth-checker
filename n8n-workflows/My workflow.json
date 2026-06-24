@@ -1,0 +1,198 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "eligibility-check",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "d1f0c39c-7c07-4441-a6d4-d3526f2d22a8",
+      "name": "Webhook",
+      "webhookId": "a40155d2-637c-417f-995f-446c7e13b96b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const message = $input.first().json.body.message;\n\nconst match = message.match(/CHECK\\s+(\\S+)\\s+(\\S+)/i);\n\nif (!match) {\n  return [{\n    json: {\n      valid: false,\n      error: \"Invalid format\"\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    memberId: match[1],\n    cptCode: match[2]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        0
+      ],
+      "id": "890083b6-e5e8-4e9c-ac5d-e2fff3796edf",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Xs4M7efb1uZZWCY2KLc4msF4Uk5OeNEUe4PKnCQ9tb0",
+          "mode": "list",
+          "cachedResultName": "EligibilityData",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xs4M7efb1uZZWCY2KLc4msF4Uk5OeNEUe4PKnCQ9tb0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Members",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xs4M7efb1uZZWCY2KLc4msF4Uk5OeNEUe4PKnCQ9tb0/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        144,
+        0
+      ],
+      "id": "b594dea4-4430-4bd4-a4ea-86bb04767b21",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "BHAgGVFTnkgdr7ju",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Xs4M7efb1uZZWCY2KLc4msF4Uk5OeNEUe4PKnCQ9tb0",
+          "mode": "list",
+          "cachedResultName": "EligibilityData",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xs4M7efb1uZZWCY2KLc4msF4Uk5OeNEUe4PKnCQ9tb0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1426940798,
+          "mode": "list",
+          "cachedResultName": "CPT_PriorAuth_Rules",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xs4M7efb1uZZWCY2KLc4msF4Uk5OeNEUe4PKnCQ9tb0/edit#gid=1426940798"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        320,
+        0
+      ],
+      "id": "f3d7344d-2be0-4fa5-a815-afd41ceccd3c",
+      "name": "Get row(s) in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "BHAgGVFTnkgdr7ju",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get data from both previous nodes\nconst members = $('Get row(s) in sheet').all();\nconst cptRules = $('Get row(s) in sheet1').all();\nconst parsed = $('Code in JavaScript1').first().json;\n\nconst memberId = parsed.memberId;\nconst cptCode = parsed.cptCode;\nconst phone = parsed.phone;\n\n// Find matching member\nconst member = members.find(m => m.json.MemberID === memberId);\n\n// Find matching CPT rule\nconst cptRule = cptRules.find(c => String(c.json.CPT) === String(cptCode));\n\n// Build decision\nlet decision;\nif (!member) {\n  decision = `❌ Member ${memberId} not found. Please verify the Member ID.`;\n} else if (member.json.CoverageStatus !== 'Active') {\n  decision = `⚠️ Member ${memberId} (${member.json.MemberName}) coverage is ${member.json.CoverageStatus}. Claim will be denied.`;\n} else if (!cptRule) {\n  decision = `⚠️ CPT code ${cptCode} not found in rules. Please verify the CPT code.`;\n} else if (cptRule.json.PriorAuthRequired === 'Yes') {\n  decision = `⚠️ Prior Authorization REQUIRED\\nMember: ${member.json.MemberName} (${memberId}) - ${member.json.CoverageStatus}\\nCPT: ${cptCode} requires prior auth before service.\\nAction: Submit prior auth request before scheduling.`;\n} else {\n  decision = `✅ Eligible - No Prior Auth Required\\nMember: ${member.json.MemberName} (${memberId}) - ${member.json.CoverageStatus}\\nCPT: ${cptCode} - cleared for billing.\\nProceed with scheduling.`;\n}\n\nreturn [{ json: { decision, memberId, cptCode, phone, timestamp: new Date().toISOString() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        0
+      ],
+      "id": "93f2de69-4bad-4c70-aad8-adfe891c223e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "a612cf2f-d4fd-4003-9544-4b25ab7450da",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b214ae16-ae07-4ff5-9653-588ac94525ea",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5022ee8e75238bc666d4d86ccb4127d3d1808304a8f8a5cb561eac3a9a9b68e9"
+  },
+  "id": "zcB9ejaCxtltlWnf",
+  "tags": []
+}
